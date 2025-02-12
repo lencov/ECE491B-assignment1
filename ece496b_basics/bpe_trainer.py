@@ -12,94 +12,95 @@ def train_bpe(
     2) Pre-tokenize using regex
     3) Convert each pre-token to UTF-8 bytes and store frequencies
     4) Iteratively find the most frequent adjacent pair of bytes in each 
-        token and merge them until we reach vocab_size or no merges remain
-    
-    Return:
-    - vocab: dict[int, bytes] - mapping from int (token ID in the vocabulary) to bytes (token bytes).
-    - merges: list[tuple[bytes, bytes]] - A list of BPE merges produced from training
-    """
+       token and merge them until we reach vocab_size or no merges remain
 
+    Returns:
+      - vocab: dict[int, bytes] - mapping from int (token ID) to token bytes.
+      - merges: list[tuple[bytes, bytes]] - list of BPE merges in order.
+    """
     if special_tokens is None:
         special_tokens = []
     
     path = Path(input_path)
     text = path.read_text(encoding="utf-8")
 
-    # Pre-tokenization with GPT-2 tokenizer regex
+    # Pre-tokenization using GPT-2 regex (compiled once)
     PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
     pre_tokens = re.findall(PAT, text)
 
-    # Convert pre-tokens to bytes and gather frequencies
-    freq_dict = collections.Counter()
-    for pt in pre_tokens:
-        pt_bytes = pt.encode("utf-8", errors="strict")
-        freq_dict[pt_bytes] += 1
+    # Convert pre-tokens to bytes and count frequencies
+    freq_dict = collections.Counter(pt.encode("utf-8", errors="strict") for pt in pre_tokens)
 
-    # Create a mapping from each token (as a tuple of single-byte bytes) to its frequency
+    # Map each pre-token (as a tuple of single-byte bytes) to its frequency
     symbol_seq_freq = {}
     for bstring, count in freq_dict.items():
-        symbol_tuple = tuple(bytes([ch]) for ch in bstring)
+        # Instead of building a new tuple for each character repeatedly, we use a generator expression wrapped in tuple.
+        symbol_tuple = tuple(bytes((ch,)) for ch in bstring)
         symbol_seq_freq[symbol_tuple] = symbol_seq_freq.get(symbol_tuple, 0) + count
 
     merges_list = []
-    # Initial vocab size: 256 single-byte tokens + special tokens
+    # Starting vocab: 256 single-byte tokens + special tokens
     current_vocab_size = 256 + len(special_tokens)
     max_merges = max(0, vocab_size - current_vocab_size)
 
+    # Main merge loop
     for _ in range(max_merges):
-        # Count all adjacent pairs in the sequences
         pair_counts = collections.Counter()
+        # Local variable assignment for speed
         for seq, f in symbol_seq_freq.items():
-            # Only consider sequences that can be merged
-            if len(seq) < 2:
+            seq_len = len(seq)
+            if seq_len < 2:
                 continue
-            for i in range(len(seq) - 1):
-                pair = (seq[i], seq[i + 1])
+            # Use local variable for pair_counts.update
+            for i in range(seq_len - 1):
+                pair = (seq[i], seq[i+1])
                 pair_counts[pair] += f
-        
+
         if not pair_counts:
             break
 
-        # Find the most common pair (using frequency and lexicographical order for ties)
+        # Find the best (most frequent) pair; ties broken lexicographically.
         best_pair, best_pair_freq = max(pair_counts.items(), key=lambda x: (x[1], x[0]))
         if best_pair_freq == 0:
             break
 
-        # Record the merge
         merges_list.append(best_pair)
         new_symbol_seq_freq = {}
-
-        # Merge the best pair in all sequences
+        # Merge best_pair in all sequences
         for seq, f in symbol_seq_freq.items():
+            seq_len = len(seq)
             merged_seq = []
             i = 0
-            while i < len(seq):
-                if i < len(seq) - 1 and (seq[i], seq[i + 1]) == best_pair:
-                    # Merge the pair into one token
-                    merged_seq.append(seq[i] + seq[i + 1])
+            while i < seq_len:
+                # Check if we can merge at this position
+                if i < seq_len - 1 and seq[i] == best_pair[0] and seq[i+1] == best_pair[1]:
+                    # Merge by concatenating the two bytes
+                    merged_seq.append(seq[i] + seq[i+1])
                     i += 2
                 else:
                     merged_seq.append(seq[i])
                     i += 1
-            new_symbol_seq_freq[tuple(merged_seq)] = new_symbol_seq_freq.get(tuple(merged_seq), 0) + f
+            # Convert list to tuple once for the dictionary key
+            t_merged = tuple(merged_seq)
+            new_symbol_seq_freq[t_merged] = new_symbol_seq_freq.get(t_merged, 0) + f
 
         symbol_seq_freq = new_symbol_seq_freq
         current_vocab_size += 1
         if current_vocab_size >= vocab_size:
             break
 
-    # Build final vocabulary *after* completing all merge iterations
+    # Build final vocabulary (do this only once at the end)
     vocab = {}
     idx = 0
-    # a) Add special tokens
+    # a) Special tokens
     for sp in special_tokens:
         vocab[idx] = sp.encode("utf-8")
         idx += 1
-    # b) Add 256 single-byte tokens
+    # b) 256 single-byte tokens
     for b in range(256):
         vocab[idx] = bytes([b])
         idx += 1
-    # c) Add merge tokens (in the order they were applied)
+    # c) Merged tokens (in the order applied)
     for pair in merges_list:
         vocab[idx] = pair[0] + pair[1]
         idx += 1

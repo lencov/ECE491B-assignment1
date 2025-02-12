@@ -45,19 +45,7 @@ def train_bpe(
 
     # Main merge loop
     for _ in range(max_merges):
-        pair_counts = collections.Counter()
-        # Local variable assignment for speed
-        for seq, f in symbol_seq_freq.items():
-            seq_len = len(seq)
-            if seq_len < 2:
-                continue
-            # Use local variable for pair_counts.update
-            for i in range(seq_len - 1):
-                pair = (seq[i], seq[i+1])
-                pair_counts[pair] += f
-
-        if not pair_counts:
-            break
+        pair_counts = count_pairs_parallel(symbol_seq_freq)
 
         # Find the best (most frequent) pair; ties broken lexicographically.
         best_pair, best_pair_freq = max(pair_counts.items(), key=lambda x: (x[1], x[0]))
@@ -106,3 +94,32 @@ def train_bpe(
         idx += 1
 
     return vocab, merges_list
+
+import multiprocessing
+
+def count_pairs_parallel(symbol_seq_freq):
+    pair_counts = collections.Counter()
+    
+    def count_chunk(chunk):
+        local_counts = collections.Counter()
+        for seq, f in chunk:
+            if len(seq) < 2:
+                continue
+            for i in range(len(seq) - 1):
+                pair = (seq[i], seq[i+1])
+                local_counts[pair] += f
+        return local_counts
+
+    # Split work across available CPU cores
+    num_workers = min(2, multiprocessing.cpu_count())  # Use 2 cores
+    chunk_size = len(symbol_seq_freq) // num_workers
+    chunks = [list(symbol_seq_freq.items())[i:i + chunk_size] for i in range(0, len(symbol_seq_freq), chunk_size)]
+    
+    with multiprocessing.Pool(num_workers) as pool:
+        results = pool.map(count_chunk, chunks)
+    
+    # Merge results
+    for res in results:
+        pair_counts.update(res)
+
+    return pair_counts

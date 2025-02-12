@@ -43,7 +43,7 @@ def train_bpe(
 
     merges_list = []
     current_vocab_size = 256 + len(special_tokens)
-    max_merges = vocab_size - current_vocab_size
+    max_merges = max(0, vocab_size - current_vocab_size) 
 
     for _ in range(max_merges):
         # count all adjacent pairs
@@ -101,4 +101,4 @@ def train_bpe(
             vocab[idx] = pair[0] + pair[1]
             idx += 1
 
-        return vocab, merges_list
+    return vocab, merges_list

@@ -19,8 +19,9 @@ start_time = time.time()
 start_mem = get_memory_usage()
 
 # Train BPE tokenizer
+print("Training BPE tokenizer...")
 vocab, merges = train_bpe(input_path, vocab_size, special_tokens)
-
+print("BPE tokenizer training complete.")
 # Measure end time and memory
 end_time = time.time()
 end_mem = get_memory_usage()

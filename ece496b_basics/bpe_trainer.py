@@ -2,105 +2,75 @@ import regex as re
 import collections
 from pathlib import Path
 import time
-import sys
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
-# --- Byte encoder: Map byte values (0-255) to Unicode characters.
-def bytes_to_unicode():
-    bs = list(range(32, 127)) + list(range(161, 173)) + list(range(174, 256))
-    cs = bs[:]
-    n = 0
-    for b in range(256):
-        if b not in bs:
-            bs.append(b)
-            cs.append(256 + n)
-            n += 1
-    cs = [chr(c) for c in cs]
-    return dict(zip(bs, cs))
-
-BYTE_ENCODER = bytes_to_unicode()
-
-def convert_token(token_tuple, byte_encoder=BYTE_ENCODER):
-    try:
-        s = "".join(byte_encoder[b] for b in token_tuple)
-    except TypeError:
-        print(f"Warning: Expected token_tuple to be iterable, got: {token_tuple}", file=sys.stderr)
-        s = ""
-    return s.encode("utf-8")
-
-def findall_with_timeout(pattern, chunk, timeout=5):
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(pattern.findall, chunk)
-        try:
-            return future.result(timeout=timeout)
-        except TimeoutError:
-            return None
-
-def stream_tokens(text, pattern, batch_size=100000, timeout=5):
-    text_len = len(text)
-    for start in range(0, text_len, batch_size):
-        end = min(start + batch_size, text_len)
-        chunk = text[start:end]
-        chunk_tokens = findall_with_timeout(pattern, chunk, timeout=timeout)
-        if chunk_tokens is None:
-            continue
-        for token in chunk_tokens:
-            token_bytes = token.encode("utf-8", errors="strict")
-            yield tuple((b,) for b in token_bytes)  # Ensure each byte is wrapped in a tuple
-
-# --- BPE Training
 def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     """
-    Trains a byte-level BPE tokenizer with pre-tokenization.
-    Fix: Prevents merges that cross pre-token boundaries.
+    1) Read text
+    2) Pre-tokenize using regex
+    3) Convert each pre-token to UTF-8 bytes and store frequencies
+    4) Iteratively find the most frequent adjacent pair of bytes in each 
+       token and merge them until we reach vocab_size or no merges remain
+
+    Returns:
+      - vocab: dict[int, bytes] - mapping from token ID to token bytes.
+      - merges: list[tuple[bytes, bytes]] - list of BPE merges in order.
     """
     t0 = time.perf_counter()
-
+    
     if special_tokens is None:
         special_tokens = []
-
+    
     # 1. Read text
     path = Path(input_path)
     text = path.read_text(encoding="utf-8")
+    t_read = time.perf_counter()
+    print(f"Reading text took: {t_read - t0:.4f} seconds")
 
-    # 2. Pre-tokenization using GPT-2 regex
+    # 2. Pre-tokenization using GPT-2 regex (compiled once)
     PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-    pattern = re.compile(PAT)
-    token_generator = stream_tokens(text, pattern, batch_size=100000, timeout=5)
+    pre_tokens = re.findall(PAT, text)
+    t_pre = time.perf_counter()
+    print(f"Pre-tokenization took: {t_pre - t_read:.4f} seconds; found {len(pre_tokens)} tokens")
 
-    # 3. Build frequency counter from the token generator.
-    freq_dict = collections.Counter(token for token in token_generator)
+    # 3. Convert pre-tokens to bytes and count frequencies
+    freq_dict = collections.Counter(pt.encode("utf-8", errors="strict") for pt in pre_tokens)
+    t_freq = time.perf_counter()
+    print(f"Converting tokens to bytes and counting frequencies took: {t_freq - t_pre:.4f} seconds; {len(freq_dict)} unique tokens")
 
-    # 4. Symbol sequence frequency mapping (start with base frequency counts)
-    symbol_seq_freq = dict(freq_dict)
+    # 4. Build initial symbol sequence frequency mapping
+    symbol_seq_freq = {}
+    for bstring, count in freq_dict.items():
+        symbol_tuple = tuple(bytes([ch]) for ch in bstring)
+        symbol_seq_freq[symbol_tuple] = symbol_seq_freq.get(symbol_tuple, 0) + count
+    t_sym = time.perf_counter()
+    print(f"Building symbol sequence frequency mapping took: {t_sym - t_freq:.4f} seconds")
 
     merges_list = []
+    # Starting vocab: 256 single-byte tokens + special tokens
     current_vocab_size = 256 + len(special_tokens)
     max_merges = max(0, vocab_size - current_vocab_size)
 
+    merge_loop_total = 0.0
+    num_iters = 0
     for _ in range(max_merges):
+        iter_start = time.perf_counter()
+        # Count adjacent pairs in all sequences
         pair_counts = collections.Counter()
-        
         for seq, f in symbol_seq_freq.items():
             if len(seq) < 2:
                 continue
             for i in range(len(seq) - 1):
-                if len(seq[i]) > 1 or len(seq[i+1]) > 1:
-                    continue  #  **Prevents merging across pre-token boundaries** 
                 pair = (seq[i], seq[i+1])
                 pair_counts[pair] += f
 
         if not pair_counts:
             break
 
-        # 5.  tie-breaking: Use the lexicographically greater pair
         best_pair, best_pair_freq = max(pair_counts.items(), key=lambda x: (x[1], x[0]))
-
         if best_pair_freq == 0:
             break
 
         merges_list.append(best_pair)
-
         new_symbol_seq_freq = {}
         for seq, f in symbol_seq_freq.items():
             merged_seq = []
@@ -116,31 +86,33 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
 
         symbol_seq_freq = new_symbol_seq_freq
         current_vocab_size += 1
-
+        num_iters += 1
+        iter_end = time.perf_counter()
+        iter_time = iter_end - iter_start
+        merge_loop_total += iter_time
+        print(f"Iteration {num_iters}: best pair {best_pair} (freq={best_pair_freq}) merged in {iter_time:.4f} seconds")
         if current_vocab_size >= vocab_size:
             break
 
-    # 6. Build final vocabulary
+    print(f"Total merge loop time for {num_iters} iterations: {merge_loop_total:.4f} seconds")
+
+    # Build final vocabulary (only once at the end)
+    t_vocab_start = time.perf_counter()
     vocab = {}
     idx = 0
-
-    # Add special tokens
     for sp in special_tokens:
         vocab[idx] = sp.encode("utf-8")
         idx += 1
-
-    # Base tokens (bytes 0-255)
     for b in range(256):
         vocab[idx] = bytes([b])
         idx += 1
-
-    # Add merged tokens
-    for merge in merges_list:
-        merged_bytes = convert_token(merge[0]) + convert_token(merge[1])
-        vocab[idx] = merged_bytes
+    for pair in merges_list:
+        vocab[idx] = pair[0] + pair[1]
         idx += 1
+    t_vocab_end = time.perf_counter()
+    print(f"Building final vocabulary took: {t_vocab_end - t_vocab_start:.4f} seconds")
 
     total_time = time.perf_counter() - t0
     print(f"Total training time: {total_time:.4f} seconds")
-
+    
     return vocab, merges_list

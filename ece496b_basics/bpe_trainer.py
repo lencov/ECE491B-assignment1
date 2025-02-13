@@ -148,7 +148,7 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
                 pair_counts[pair] += f
         if not pair_counts:
             break
-        best_pair, best_pair_freq = max(pair_counts.items(), key=lambda x: (x[1], x[0]))
+        best_pair, best_pair_freq = min(pair_counts.items(), key=lambda x: (-x[1], x[0]))
         if best_pair_freq == 0:
             break
         merges_list.append(best_pair)

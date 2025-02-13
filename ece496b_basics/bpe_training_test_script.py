@@ -34,7 +34,7 @@ with open(output_dir / "vocab.json", "w") as f:
 
 with open(output_dir / "merges.txt", "w") as f:
     for merge in merges:
-        f.write(f"{merge[0].decode('utf-8', errors='ignore')} {merge[1].decode('utf-8', errors='ignore')}\n")
+        f.write(f"{bytes(merge[0]).decode('utf-8', errors='ignore')} {bytes(merge[1]).decode('utf-8', errors='ignore')}\n")
 
 # Find the longest token in the vocabulary
 longest_token = max(vocab.values(), key=len)

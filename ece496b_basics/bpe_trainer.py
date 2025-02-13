@@ -20,7 +20,8 @@ def findall_with_timeout(pattern, chunk, timeout=5):
 def stream_tokens(text, pattern, batch_size=10000, timeout=5):
     """
     Generator that yields tokens from text in batches.
-    Each token is converted to a tuple of ints (e.g. b"A" becomes (65,)).
+    Each token is converted to a tuple of ints.
+    Logs processing for each batch.
     If a batch times out, logs and skips that batch.
     """
     text_len = len(text)
@@ -32,27 +33,25 @@ def stream_tokens(text, pattern, batch_size=10000, timeout=5):
         chunk_tokens = findall_with_timeout(pattern, chunk, timeout=timeout)
         batch_end_time = time.perf_counter()
         batch_time = batch_end_time - batch_start_time
-
+        
         if chunk_tokens is None:
             sample = chunk[:100]
             print(f"⚠️ Timeout processing chunk starting at {start} (batch size {batch_size}). Skipping this chunk. Sample: {sample!r}", file=sys.stderr)
             continue
-
         print(f"  Batch starting at {start} produced {len(chunk_tokens)} tokens in {batch_time:.2f}s")
         for token in chunk_tokens:
-            # Convert token (a string) to its UTF-8 bytes, then to a tuple of ints.
             yield tuple(token.encode("utf-8", errors="strict"))
 
 def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     """
     1) Read text from file.
-    2) Stream tokens using a regex (each token is converted to a tuple of ints).
-    3) Update frequency counts on the fly.
+    2) Pre-tokenize using a regex in batches (streaming tokens).
+    3) Convert each token to a compact representation (tuple of ints) and update frequency counts.
     4) Iteratively merge tokens via BPE until the vocabulary size is reached.
 
     Returns:
       - vocab: dict[int, bytes] - mapping from token ID to token bytes.
-      - merges: list[tuple[tuple[int], tuple[int]]] - list of BPE merges (each merge is a tuple of token tuples).
+      - merges: list[tuple[bytes, bytes]] - list of BPE merges in order.
     """
     t0 = time.perf_counter()
     
@@ -74,20 +73,20 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     token_generator = stream_tokens(text, pattern, batch_size=10000, timeout=5)
     
     # 3. Update frequency counter directly from the generator (streaming)
-    # Keys will be tuples of ints.
+    # Keys are tuples of ints (compact representation)
     freq_dict = collections.Counter(token for token in token_generator)
     t_freq = time.perf_counter()
     print(f"Streaming token frequency counting took: {t_freq - t_read:.4f} seconds; {len(freq_dict)} unique tokens")
     
-    # 4. Build initial symbol sequence frequency mapping
-    # Our freq_dict keys are already tuples of ints, so we can use it directly.
+    # 4. Build initial symbol sequence frequency mapping.
+    # Our freq_dict keys are already our compact token representation.
     symbol_seq_freq = dict(freq_dict)
     t_sym = time.perf_counter()
     print(f"Building symbol sequence frequency mapping took: {t_sym - t_freq:.4f} seconds")
     
     merges_list = []
-    # Starting vocabulary: 256 base tokens + special tokens.
-    # We represent base tokens as (b,) for each byte value b.
+    # Starting vocab: 256 base tokens + special tokens.
+    # Represent base tokens as one-element tuples.
     current_vocab_size = 256 + len(special_tokens)
     max_merges = max(0, vocab_size - current_vocab_size)
     
@@ -118,7 +117,7 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
             i = 0
             while i < len(seq):
                 if i < len(seq) - 1 and (seq[i], seq[i+1]) == best_pair:
-                    # Merge by concatenating tuples.
+                    # Merge by concatenating the two tuples.
                     merged_seq.append(seq[i] + seq[i+1])
                     i += 2
                 else:
@@ -142,17 +141,20 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     t_vocab_start = time.perf_counter()
     vocab = {}
     idx = 0
-    # Add special tokens first (they remain as given)
+    # Add special tokens first (as bytes)
     for sp in special_tokens:
         vocab[idx] = sp.encode("utf-8")
         idx += 1
-    # Add base tokens: each base token is represented as a tuple with one element (0, 1, ..., 255)
+    # Add base tokens: each base token is represented as a one-element tuple; convert to bytes.
     for b in range(256):
-        vocab[idx] = bytes((b,))  # Convert tuple (b,) to bytes
+        vocab[idx] = bytes((b,))
         idx += 1
-    # Add merged tokens from merges_list (each merge is a tuple of ints)
-    for pair in merges_list:
-        vocab[idx] = bytes(pair[0] + pair[1])
+    # Add merged tokens from merges_list.
+    # Each merge in merges_list is a pair of tokens (each token is a tuple of ints).
+    # Convert each token to bytes.
+    for merge in merges_list:
+        # merge is a tuple like (token1, token2) where token1 and token2 are tuples of ints.
+        vocab[idx] = (bytes(merge[0]), bytes(merge[1]))  # For testing, we return merges as tuples of bytes.
         idx += 1
     t_vocab_end = time.perf_counter()
     print(f"Building final vocabulary took: {t_vocab_end - t_vocab_start:.4f} seconds")
@@ -160,4 +162,10 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     total_time = time.perf_counter() - t0
     print(f"Total training time: {total_time:.4f} seconds")
     
-    return vocab, merges_list
+    # For the purpose of testing, we return:
+    # - The vocabulary: a dict mapping token IDs to bytes for special and base tokens,
+    #   and to a tuple of bytes for merged tokens.
+    # - The merges list: but we can also convert merges_list to a list of tuples of bytes.
+    converted_merges = [(bytes(a), bytes(b)) for (a, b) in merges_list]
+    
+    return vocab, converted_merges

@@ -52,7 +52,7 @@ def findall_with_timeout(pattern, chunk, timeout=5):
         except TimeoutError:
             return None
 
-def stream_tokens(text, pattern, batch_size=10000, timeout=5):
+def stream_tokens(text, pattern, batch_size=100000, timeout=5):
     """
     Generator that yields tokens from text in batches.
     For each token string found by the regex, we split it into a sequence of base tokens.
@@ -81,7 +81,7 @@ def stream_tokens(text, pattern, batch_size=10000, timeout=5):
             # First, encode the token to bytes.
             token_bytes = token.encode("utf-8", errors="strict")
             # Then, split the bytes into individual base tokens: each as a one-element tuple.
-            yield tuple(b for b in token_bytes)
+            yield tuple(bytes([b]) for b in token_bytes)
 
 # --- BPE Training
 def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):

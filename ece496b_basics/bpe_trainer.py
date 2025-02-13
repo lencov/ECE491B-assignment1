@@ -15,16 +15,14 @@ def findall_with_timeout(pattern, chunk, timeout=5):
         try:
             return future.result(timeout=timeout)
         except TimeoutError:
-            return None  # Indicate failure
+            return None
 
-def batch_pre_tokenize(text, pattern, batch_size=10000, timeout=5):
+def stream_tokens(text, pattern, batch_size=10000, timeout=5):
     """
-    Pre-tokenize text in batches of 'batch_size' characters.
-    Logs processing time, memory usage, and number of tokens per batch.
-    If a batch times out, logs the issue and skips the problematic chunk.
-    Returns a list of tokens.
+    Generator that yields tokens from text in batches.
+    Logs processing for each batch.
+    If a batch times out, it logs and skips that batch.
     """
-    tokens = []
     text_len = len(text)
     for start in range(0, text_len, batch_size):
         end = min(start + batch_size, text_len)
@@ -35,23 +33,20 @@ def batch_pre_tokenize(text, pattern, batch_size=10000, timeout=5):
         batch_end_time = time.perf_counter()
         batch_time = batch_end_time - batch_start_time
         
-        # If regex timed out, skip this chunk
         if chunk_tokens is None:
             sample = chunk[:100]
-            print(f"⚠️ Timeout processing chunk starting at {start} (batch size {batch_size}). Sample: {sample!r}", file=sys.stderr)
-            continue  # Skip this batch
-        
+            print(f"⚠️ Timeout processing chunk starting at {start} (batch size {batch_size}). Skipping this chunk. Sample: {sample!r}", file=sys.stderr)
+            continue
         print(f"  Batch starting at {start} produced {len(chunk_tokens)} tokens in {batch_time:.2f}s")
-        tokens.extend(chunk_tokens)
-    return tokens
+        for token in chunk_tokens:
+            yield token
 
 def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     """
     1) Read text from file.
-    2) Pre-tokenize using a regex in batches.
-    3) Convert each pre-token to UTF-8 bytes and store frequencies.
-    4) Iteratively find the most frequent adjacent pair of bytes in each 
-       token and merge them until we reach vocab_size or no merges remain.
+    2) Pre-tokenize using a regex in batches (streaming tokens).
+    3) Convert each token to UTF-8 bytes and update frequency counts.
+    4) Iteratively merge tokens via BPE until the vocabulary size is reached.
 
     Returns:
       - vocab: dict[int, bytes] - mapping from token ID to token bytes.
@@ -73,15 +68,13 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     # 2. Pre-tokenization using GPT-2 regex (compiled once)
     PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
     pattern = re.compile(PAT)
-    # Use batch pre-tokenization with timeout handling
-    pre_tokens = batch_pre_tokenize(text, pattern, batch_size=10000, timeout=5)
-    t_pre = time.perf_counter()
-    print(f"Pre-tokenization took: {t_pre - t_read:.4f} seconds; found {len(pre_tokens)} tokens")
+    # Stream tokens rather than accumulating them in a list
+    token_generator = stream_tokens(text, pattern, batch_size=10000, timeout=5)
     
-    # 3. Convert pre-tokens to bytes and count frequencies
-    freq_dict = collections.Counter(pt.encode("utf-8", errors="strict") for pt in pre_tokens)
+    # 3. Update frequency counter directly from the generator (streaming)
+    freq_dict = collections.Counter(token.encode("utf-8", errors="strict") for token in token_generator)
     t_freq = time.perf_counter()
-    print(f"Converting tokens to bytes and counting frequencies took: {t_freq - t_pre:.4f} seconds; {len(freq_dict)} unique tokens")
+    print(f"Streaming token frequency counting took: {t_freq - t_read:.4f} seconds; {len(freq_dict)} unique tokens")
     
     # 4. Build initial symbol sequence frequency mapping
     symbol_seq_freq = {}
@@ -162,10 +155,3 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     print(f"Total training time: {total_time:.4f} seconds")
     
     return vocab, merges_list
-
-# Example usage:
-if __name__ == "__main__":
-    input_path = "path/to/your/text.txt"  # Adjust this path accordingly.
-    vocab_size = 500
-    special_tokens = ["<|endoftext|>"]
-    train_bpe(input_path, vocab_size, special_tokens)

@@ -29,7 +29,7 @@ def test_train_bpe():
     input_path = FIXTURES_PATH / "corpus.en"
     vocab, merges = run_train_bpe(
         input_path=input_path,
-        vocab_size=500,
+        vocab_size=10000,
         special_tokens=["<|endoftext|>"],
     )
 

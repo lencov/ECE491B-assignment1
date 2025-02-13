@@ -4,11 +4,11 @@ from pathlib import Path
 import time
 import sys
 
-def batch_pre_tokenize(text, pattern, batch_size=50000):
+def batch_pre_tokenize(text, pattern, batch_size=10000):
     """
     Pre-tokenize text in batches of 'batch_size' characters.
     Logs the batch start, end, and number of tokens for each batch.
-    If an error occurs, prints the batch start position and re-raises the error.
+    If an error occurs, prints the batch start position, a sample of the chunk, and re-raises the error.
     Returns a list of tokens.
     """
     tokens = []
@@ -20,7 +20,8 @@ def batch_pre_tokenize(text, pattern, batch_size=50000):
         try:
             chunk_tokens = pattern.findall(chunk)
         except Exception as e:
-            print(f"Error processing chunk starting at {start} (batch size {batch_size}): {e}", file=sys.stderr)
+            sample = chunk[:100]
+            print(f"Error processing chunk starting at {start} (batch size {batch_size}). Sample of chunk: {sample!r}", file=sys.stderr)
             raise
         print(f"  Batch starting at {start} produced {len(chunk_tokens)} tokens")
         tokens.extend(chunk_tokens)
@@ -54,8 +55,8 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     # 2. Pre-tokenization using GPT-2 regex (compiled once)
     PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
     pattern = re.compile(PAT)
-    # Use batch pre-tokenization with a smaller batch size
-    pre_tokens = batch_pre_tokenize(text, pattern, batch_size=50000)
+    # Use batch pre-tokenization with a smaller batch size (e.g. 10,000 characters)
+    pre_tokens = batch_pre_tokenize(text, pattern, batch_size=10000)
     t_pre = time.perf_counter()
     print(f"Pre-tokenization took: {t_pre - t_read:.4f} seconds; found {len(pre_tokens)} tokens")
     

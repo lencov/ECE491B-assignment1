@@ -2,7 +2,7 @@ import time
 import psutil
 import json
 from pathlib import Path
-from ece496b_basics.bpe_trainer import train_bpe
+import tiktoken
 
 # Function to measure memory usage
 def get_memory_usage():
@@ -10,7 +10,7 @@ def get_memory_usage():
     return process.memory_info().rss / (1024 ** 3)  # Convert to GB
 
 # Define input file and output paths
-input_path = "/content/ECE491B-assignment1/data/TinyStoriesV2-GPT4-train.txt"  # Update this to the actual dataset path
+input_path = "/content/ECE491B-assignment1/data/TinyStoriesV2-GPT4-train.txt"  # Update this
 vocab_size = 10000
 special_tokens = ["<|endoftext|>"]
 
@@ -18,10 +18,12 @@ special_tokens = ["<|endoftext|>"]
 start_time = time.time()
 start_mem = get_memory_usage()
 
-# Train BPE tokenizer
-print("Training BPE tokenizer...")
-vocab, merges = train_bpe(input_path, vocab_size, special_tokens)
+# Train BPE tokenizer using tiktoken
+print("Training BPE tokenizer with tiktoken...")
+bpe_trainer = tiktoken.get_bpe_from_files(vocab_size, special_tokens=special_tokens)
+vocab, merges = bpe_trainer.train(input_path)
 print("BPE tokenizer training complete.")
+
 # Measure end time and memory
 end_time = time.time()
 end_mem = get_memory_usage()
@@ -29,17 +31,18 @@ end_mem = get_memory_usage()
 # Save vocab and merges to disk
 output_dir = Path("bpe_tinystories")
 output_dir.mkdir(exist_ok=True)
+
 with open(output_dir / "vocab.json", "w") as f:
-    json.dump({k: v.decode("utf-8", errors="ignore") for k, v in vocab.items()}, f, indent=2)
+    json.dump(vocab, f, indent=2)
 
 with open(output_dir / "merges.txt", "w") as f:
     for merge in merges:
-        f.write(f"{bytes(merge[0]).decode('utf-8', errors='ignore')} {bytes(merge[1]).decode('utf-8', errors='ignore')}\n")
+        f.write(f"{merge[0]} {merge[1]}\n")
 
 # Find the longest token in the vocabulary
-longest_token = max(vocab.values(), key=len)
+longest_token = max(vocab.keys(), key=len)
 
 # Print results
 print(f"Training Time: {end_time - start_time:.2f} seconds")
 print(f"Memory Usage: {end_mem - start_mem:.2f} GB")
-print(f"Longest Token: {longest_token.decode('utf-8', errors='ignore')} ({len(longest_token)} bytes)")
+print(f"Longest Token: {longest_token} ({len(longest_token)} bytes)")

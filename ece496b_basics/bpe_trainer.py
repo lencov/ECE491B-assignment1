@@ -67,7 +67,7 @@ def stream_tokens(text, pattern, batch_size=10000, timeout=5):
     for start in range(0, text_len, batch_size):
         end = min(start + batch_size, text_len)
         chunk = text[start:end]
-        print(f"Processing batch from {start} to {end} (size {end - start})")
+        #print(f"Processing batch from {start} to {end} (size {end - start})")
         batch_start_time = time.perf_counter()
         chunk_tokens = findall_with_timeout(pattern, chunk, timeout=timeout)
         batch_end_time = time.perf_counter()
@@ -76,7 +76,7 @@ def stream_tokens(text, pattern, batch_size=10000, timeout=5):
             sample = chunk[:100]
             print(f"⚠️ Timeout processing chunk starting at {start} (batch size {batch_size}). Skipping this chunk. Sample: {sample!r}", file=sys.stderr)
             continue
-        print(f"  Batch starting at {start} produced {len(chunk_tokens)} tokens in {batch_time:.2f}s")
+        #print(f"  Batch starting at {start} produced {len(chunk_tokens)} tokens in {batch_time:.2f}s")
         for token in chunk_tokens:
             # First, encode the token to bytes.
             token_bytes = token.encode("utf-8", errors="strict")
@@ -170,7 +170,7 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
         iter_end = time.perf_counter()
         iter_time = iter_end - iter_start
         merge_loop_total += iter_time
-        print(f"Iteration {num_iters}: best pair {best_pair} (freq={best_pair_freq}) merged in {iter_time:.4f} seconds")
+        #print(f"Iteration {num_iters}: best pair {best_pair} (freq={best_pair_freq}) merged in {iter_time:.4f} seconds")
         if current_vocab_size >= vocab_size:
             break
     print(f"Total merge loop time for {num_iters} iterations: {merge_loop_total:.4f} seconds")

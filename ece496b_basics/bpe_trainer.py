@@ -81,7 +81,7 @@ def stream_tokens(text, pattern, batch_size=10000, timeout=5):
             # First, encode the token to bytes.
             token_bytes = token.encode("utf-8", errors="strict")
             # Then, split the bytes into individual base tokens: each as a one-element tuple.
-            yield tuple((b,) for b in token_bytes)
+            yield tuple(token_bytes)
 
 # --- BPE Training
 def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):

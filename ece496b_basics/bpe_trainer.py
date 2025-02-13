@@ -11,9 +11,9 @@ def bytes_to_unicode():
     Returns a dictionary mapping byte values (0-255) to Unicode characters.
     This is essentially the mapping used in GPT-2's tokenizer.
     """
-    bs = list(range(ord("!"), ord("~") + 1)) + \
-         list(range(ord("¡"), ord("¬") + 1)) + \
-         list(range(ord("®"), ord("ÿ") + 1))
+    bs = list(range(32, 127)) + \
+     list(range(161, 173)) + \
+     list(range(174, 256))
     cs = bs[:]
     n = 0
     for b in range(256):

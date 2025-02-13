@@ -11,7 +11,7 @@ def get_memory_usage():
 
 # Define input file and output paths
 input_path = "/content/ECE491B-assignment1/data/TinyStoriesV2-GPT4-train.txt"  # Update this to the actual dataset path
-vocab_size = 10_000
+vocab_size = 10000
 special_tokens = ["<|endoftext|>"]
 
 # Track time and memory

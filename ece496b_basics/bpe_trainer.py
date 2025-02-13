@@ -28,7 +28,8 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
 
     # 2. Pre-tokenization using GPT-2 regex (compiled once)
     PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-    pre_tokens = re.findall(PAT, text)
+    pattern = re.compile(PAT)
+    pre_tokens = re.findall(pattern, text)
     t_pre = time.perf_counter()
     print(f"Pre-tokenization took: {t_pre - t_read:.4f} seconds; found {len(pre_tokens)} tokens")
 

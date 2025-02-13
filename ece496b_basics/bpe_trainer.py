@@ -18,7 +18,7 @@ def findall_with_timeout(pattern, chunk, timeout=5):
         except TimeoutError:
             return None  # Indicate failure
 
-def batch_pre_tokenize(text, pattern, batch_size=10000, timeout=5):
+def batch_pre_tokenize(text, pattern, batch_size=1000, timeout=5):
     """
     Pre-tokenize text in batches of 'batch_size' characters.
     Logs processing time, memory usage, and number of tokens per batch.
@@ -31,7 +31,8 @@ def batch_pre_tokenize(text, pattern, batch_size=10000, timeout=5):
     for start in range(0, text_len, batch_size):
         end = min(start + batch_size, text_len)
         chunk = text[start:end]
-        print(f"Processing batch from {start} to {end} (size {end - start})")
+        if start % 100000 == 0:
+            print(f"Processing batch from {start} to {end} (size {end - start})")
 
         batch_start_time = time.perf_counter()
         chunk_tokens = findall_with_timeout(pattern, chunk, timeout=timeout)
@@ -45,7 +46,8 @@ def batch_pre_tokenize(text, pattern, batch_size=10000, timeout=5):
 
         # Log memory usage
         mem_usage = psutil.Process().memory_info().rss / (1024 ** 3)  # Convert bytes to GB
-        print(f"  Batch produced {len(chunk_tokens)} tokens in {batch_time:.2f}s. Memory usage: {mem_usage:.2f} GB")
+        if start % 100000 == 0:
+            print(f"  Batch produced {len(chunk_tokens)} tokens in {batch_time:.2f}s. Memory usage: {mem_usage:.2f} GB")
 
         # Extend token list
         tokens.extend(chunk_tokens)

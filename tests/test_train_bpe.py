@@ -67,21 +67,21 @@ def test_train_bpe():
     assert set(vocab.keys()) == set(reference_vocab.keys())
     assert set(vocab.values()) == set(reference_vocab.values())
 
-    def print_merge_differences(merges1, merges2):
-        len1, len2 = len(merges1), len(merges2)
-        if len1 != len2:
-            print(f"Length differs: {len1} vs {len2}")
-        for i, (m1, m2) in enumerate(zip(merges1, merges2)):
-            if m1 != m2:
-                print(f"Difference at index {i}:")
-                print(f"  Got:       {m1}")
-                print(f"  Expected:  {m2}")
-        # If one list is longer, print the extra elements.
-        if len1 > len2:
-            print("Extra elements in merges1:")
-            for i in range(len2, len1):
-                print(f"  Index {i}: {merges1[i]}")
-        elif len2 > len1:
-            print("Extra elements in reference merges:")
-            for i in range(len1, len2):
-                print(f"  Index {i}: {merges2[i]}")
+def print_merge_differences(merges1, merges2):
+    len1, len2 = len(merges1), len(merges2)
+    if len1 != len2:
+        print(f"Length differs: {len1} vs {len2}")
+    for i, (m1, m2) in enumerate(zip(merges1, merges2)):
+        if m1 != m2:
+            print(f"Difference at index {i}:")
+            print(f"  Got:       {m1}")
+            print(f"  Expected:  {m2}")
+    # If one list is longer, print the extra elements.
+    if len1 > len2:
+        print("Extra elements in merges1:")
+        for i in range(len2, len1):
+            print(f"  Index {i}: {merges1[i]}")
+    elif len2 > len1:
+        print("Extra elements in reference merges:")
+        for i in range(len1, len2):
+            print(f"  Index {i}: {merges2[i]}")

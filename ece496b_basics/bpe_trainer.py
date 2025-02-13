@@ -14,7 +14,7 @@ def findall_with_timeout(pattern, chunk, timeout=5):
         future = executor.submit(pattern.findall, chunk)
         return future.result(timeout=timeout)
 
-def batch_pre_tokenize(text, pattern, batch_size=10000, timeout=5):
+def batch_pre_tokenize(text, pattern, batch_size=1000, timeout=5):
     """
     Pre-tokenize text in batches of 'batch_size' characters.
     Logs the batch start, end, and number of tokens for each batch.
@@ -26,7 +26,8 @@ def batch_pre_tokenize(text, pattern, batch_size=10000, timeout=5):
     for start in range(0, text_len, batch_size):
         end = min(start + batch_size, text_len)
         chunk = text[start:end]
-        print(f"Processing batch from {start} to {end} (size {end - start})")
+        if start % 100000 == 0:
+            print(f"Processing batch from {start} to {end} (size {end - start})")
         try:
             chunk_tokens = findall_with_timeout(pattern, chunk, timeout=timeout)
         except TimeoutError:

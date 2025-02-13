@@ -3,7 +3,6 @@ import collections
 from pathlib import Path
 import time
 import sys
-import psutil
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 def findall_with_timeout(pattern, chunk, timeout=5):
@@ -18,40 +17,32 @@ def findall_with_timeout(pattern, chunk, timeout=5):
         except TimeoutError:
             return None  # Indicate failure
 
-def batch_pre_tokenize(text, pattern, batch_size=1000, timeout=5):
+def batch_pre_tokenize(text, pattern, batch_size=10000, timeout=5):
     """
     Pre-tokenize text in batches of 'batch_size' characters.
     Logs processing time, memory usage, and number of tokens per batch.
-    If a batch times out, logs the issue and skips it.
+    If a batch times out, logs the issue and skips the problematic chunk.
     Returns a list of tokens.
     """
     tokens = []
     text_len = len(text)
-    
     for start in range(0, text_len, batch_size):
         end = min(start + batch_size, text_len)
         chunk = text[start:end]
-        if start % 100000 == 0:
-            print(f"Processing batch from {start} to {end} (size {end - start})")
-
+        print(f"Processing batch from {start} to {end} (size {end - start})")
         batch_start_time = time.perf_counter()
         chunk_tokens = findall_with_timeout(pattern, chunk, timeout=timeout)
         batch_end_time = time.perf_counter()
         batch_time = batch_end_time - batch_start_time
         
-        # Check if timeout occurred
+        # If regex timed out, skip this chunk
         if chunk_tokens is None:
-            print(f"⚠️ Timeout on batch starting at {start} (batch size {batch_size}). Skipping this chunk.")
+            sample = chunk[:100]
+            print(f"⚠️ Timeout processing chunk starting at {start} (batch size {batch_size}). Sample: {sample!r}", file=sys.stderr)
             continue  # Skip this batch
-
-        # Log memory usage
-        mem_usage = psutil.Process().memory_info().rss / (1024 ** 3)  # Convert bytes to GB
-        if start % 100000 == 0:
-            print(f"  Batch produced {len(chunk_tokens)} tokens in {batch_time:.2f}s. Memory usage: {mem_usage:.2f} GB")
-
-        # Extend token list
+        
+        print(f"  Batch starting at {start} produced {len(chunk_tokens)} tokens in {batch_time:.2f}s")
         tokens.extend(chunk_tokens)
-
     return tokens
 
 def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
@@ -82,7 +73,6 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     # 2. Pre-tokenization using GPT-2 regex (compiled once)
     PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
     pattern = re.compile(PAT)
-    
     # Use batch pre-tokenization with timeout handling
     pre_tokens = batch_pre_tokenize(text, pattern, batch_size=10000, timeout=5)
     t_pre = time.perf_counter()

@@ -32,7 +32,12 @@ def convert_token(token_tuple, byte_encoder=BYTE_ENCODER):
     Converts a token (a tuple of ints) into a UTF-8 bytes object.
     Each integer is mapped through the byte_encoder.
     """
-    s = "".join(byte_encoder[b] for b in token_tuple)
+    # If token_tuple is not iterable, log a warning and return an empty bytes.
+    try:
+        s = "".join(byte_encoder[b] for b in token_tuple)
+    except TypeError:
+        print(f"Warning: Expected token_tuple to be iterable, got: {token_tuple}", file=sys.stderr)
+        s = ""
     return s.encode("utf-8")
 
 # --- Token streaming and timeout
@@ -52,6 +57,7 @@ def stream_tokens(text, pattern, batch_size=10000, timeout=5):
     """
     Generator that yields tokens from text in batches.
     Each token is immediately converted to a tuple of ints.
+    Logs processing for each batch.
     If a batch times out, logs and skips that batch.
     """
     text_len = len(text)
@@ -69,7 +75,7 @@ def stream_tokens(text, pattern, batch_size=10000, timeout=5):
             continue
         print(f"  Batch starting at {start} produced {len(chunk_tokens)} tokens in {batch_time:.2f}s")
         for token in chunk_tokens:
-            # Convert the token (string) to bytes, then to a tuple of ints.
+            # Convert the token (a string) to a tuple of ints.
             yield tuple(token.encode("utf-8", errors="strict"))
 
 # --- BPE Training
@@ -82,7 +88,7 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     5) Build the final vocabulary:
          - Special tokens (converted to UTF-8 bytes),
          - Base tokens: each byte is mapped via our custom byte encoder,
-         - Merged tokens: each token (tuple of ints) is converted to bytes via convert_token().
+         - Merged tokens: each token (tuple of ints) is converted to bytes via convert_token.
          
     Returns:
       - vocab: dict[int, bytes] - mapping from token ID to token bytes.
@@ -178,14 +184,19 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
         idx += 1
     # Base tokens: map each byte via our byte encoder.
     for b in range(256):
-        # Convert the single byte to its mapped Unicode character.
         token_str = BYTE_ENCODER[b]
         vocab[idx] = token_str.encode("utf-8")
         idx += 1
     # Merged tokens: convert each merged token tuple to bytes using convert_token.
     for merge in merges_list:
-        # merge is a tuple of two tokens (each token is a tuple of ints).
-        vocab[idx] = (convert_token(merge[0]) + convert_token(merge[1]))
+        # Expect merge to be a tuple of two tokens (each token is a tuple of ints)
+        if isinstance(merge, tuple) and len(merge) == 2:
+            merged_bytes = convert_token(merge[0]) + convert_token(merge[1])
+        else:
+            print(f"Warning: unexpected merge format: {merge}", file=sys.stderr)
+            # If merge is not a 2-tuple, try converting it directly.
+            merged_bytes = convert_token(merge) if isinstance(merge, tuple) else b""
+        vocab[idx] = merged_bytes
         idx += 1
     t_vocab_end = time.perf_counter()
     print(f"Building final vocabulary took: {t_vocab_end - t_vocab_start:.4f} seconds")
@@ -193,7 +204,12 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     total_time = time.perf_counter() - t0
     print(f"Total training time: {total_time:.4f} seconds")
     
-    # For testing, we convert merges_list to a list of tuples of bytes.
-    converted_merges = [(convert_token(a), convert_token(b)) for (a, b) in merges_list]
+    # For testing, convert merges_list to a list of tuples of bytes.
+    converted_merges = []
+    for merge in merges_list:
+        if isinstance(merge, tuple) and len(merge) == 2:
+            converted_merges.append((convert_token(merge[0]), convert_token(merge[1])))
+        else:
+            converted_merges.append((b"", b""))
     
     return vocab, converted_merges

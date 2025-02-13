@@ -2,23 +2,6 @@ import regex as re
 import collections
 from pathlib import Path
 import time
-from numba import njit
-
-# JIT-compiled merge function using forceobj, caching the append method.
-@njit(forceobj=True)
-def merge_sequence(seq, best_pair):
-    merged_seq = []
-    append_fn = merged_seq.append  # cache the append method
-    i = 0
-    n = len(seq)
-    while i < n:
-        if i < n - 1 and seq[i] == best_pair[0] and seq[i+1] == best_pair[1]:
-            append_fn(seq[i] + seq[i+1])
-            i += 2
-        else:
-            append_fn(seq[i])
-            i += 1
-    return tuple(merged_seq)
 
 def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     """
@@ -43,7 +26,7 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     t_read = time.perf_counter()
     print(f"Reading text took: {t_read - t0:.4f} seconds")
 
-    # 2. Pre-tokenization using GPT-2 regex
+    # 2. Pre-tokenization using GPT-2 regex (compiled once)
     PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
     pre_tokens = re.findall(PAT, text)
     t_pre = time.perf_counter()
@@ -63,7 +46,7 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     print(f"Building symbol sequence frequency mapping took: {t_sym - t_freq:.4f} seconds")
 
     merges_list = []
-    # Starting vocab size: 256 single-byte tokens + special tokens
+    # Starting vocab: 256 single-byte tokens + special tokens
     current_vocab_size = 256 + len(special_tokens)
     max_merges = max(0, vocab_size - current_vocab_size)
 
@@ -89,10 +72,17 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
 
         merges_list.append(best_pair)
         new_symbol_seq_freq = {}
-        # Use our JIT-compiled merge_sequence for each sequence
         for seq, f in symbol_seq_freq.items():
-            merged_seq = merge_sequence(seq, best_pair)
-            new_symbol_seq_freq[merged_seq] = new_symbol_seq_freq.get(merged_seq, 0) + f
+            merged_seq = []
+            i = 0
+            while i < len(seq):
+                if i < len(seq) - 1 and (seq[i], seq[i+1]) == best_pair:
+                    merged_seq.append(seq[i] + seq[i+1])
+                    i += 2
+                else:
+                    merged_seq.append(seq[i])
+                    i += 1
+            new_symbol_seq_freq[tuple(merged_seq)] = new_symbol_seq_freq.get(tuple(merged_seq), 0) + f
 
         symbol_seq_freq = new_symbol_seq_freq
         current_vocab_size += 1

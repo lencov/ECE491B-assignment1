@@ -4,21 +4,25 @@ from pathlib import Path
 import time
 import sys
 
-def batch_pre_tokenize(text, pattern, batch_size=100000):
+def batch_pre_tokenize(text, pattern, batch_size=50000):
     """
     Pre-tokenize text in batches of 'batch_size' characters.
+    Logs the batch start, end, and number of tokens for each batch.
     If an error occurs, prints the batch start position and re-raises the error.
     Returns a list of tokens.
     """
     tokens = []
     text_len = len(text)
     for start in range(0, text_len, batch_size):
-        chunk = text[start:start+batch_size]
+        end = min(start + batch_size, text_len)
+        chunk = text[start:end]
+        print(f"Processing batch from {start} to {end} (size {end - start})")
         try:
             chunk_tokens = pattern.findall(chunk)
         except Exception as e:
             print(f"Error processing chunk starting at {start} (batch size {batch_size}): {e}", file=sys.stderr)
             raise
+        print(f"  Batch starting at {start} produced {len(chunk_tokens)} tokens")
         tokens.extend(chunk_tokens)
     return tokens
 
@@ -50,8 +54,8 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     # 2. Pre-tokenization using GPT-2 regex (compiled once)
     PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
     pattern = re.compile(PAT)
-    # Use batch pre-tokenization
-    pre_tokens = batch_pre_tokenize(text, pattern, batch_size=100000)
+    # Use batch pre-tokenization with a smaller batch size
+    pre_tokens = batch_pre_tokenize(text, pattern, batch_size=50000)
     t_pre = time.perf_counter()
     print(f"Pre-tokenization took: {t_pre - t_read:.4f} seconds; found {len(pre_tokens)} tokens")
     
@@ -142,7 +146,7 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
 
 # Example usage:
 if __name__ == "__main__":
-    input_path = "path/to/your/text.txt"  # adjust this path
+    input_path = "path/to/your/text.txt"  # Adjust this path accordingly.
     vocab_size = 500
     special_tokens = ["<|endoftext|>"]
     train_bpe(input_path, vocab_size, special_tokens)

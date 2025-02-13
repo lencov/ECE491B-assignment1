@@ -1,8 +1,7 @@
 import time
 import psutil
-import json
+from tokenizers import ByteLevelBPETokenizer
 from pathlib import Path
-import tiktoken
 
 # Function to measure memory usage
 def get_memory_usage():
@@ -10,7 +9,7 @@ def get_memory_usage():
     return process.memory_info().rss / (1024 ** 3)  # Convert to GB
 
 # Define input file and output paths
-input_path = "/content/ECE491B-assignment1/data/TinyStoriesV2-GPT4-train.txt"  # Update this
+input_path = "/content/ECE491B-assignment1/data/TinyStoriesV2-GPT4-train.txt"  # Update this to the actual dataset path
 vocab_size = 10000
 special_tokens = ["<|endoftext|>"]
 
@@ -18,28 +17,25 @@ special_tokens = ["<|endoftext|>"]
 start_time = time.time()
 start_mem = get_memory_usage()
 
-# Train BPE tokenizer using tiktoken
-print("Training BPE tokenizer with tiktoken...")
-bpe_trainer = tiktoken.get_bpe_from_files(vocab_size, special_tokens=special_tokens)
-vocab, merges = bpe_trainer.train(input_path)
+# Initialize the tokenizer
+tokenizer = ByteLevelBPETokenizer()
+
+# Train the tokenizer
+print("Training BPE tokenizer with Hugging Face tokenizers...")
+tokenizer.train(files=[input_path], vocab_size=vocab_size, special_tokens=special_tokens)
 print("BPE tokenizer training complete.")
 
 # Measure end time and memory
 end_time = time.time()
 end_mem = get_memory_usage()
 
-# Save vocab and merges to disk
+# Save the tokenizer to disk
 output_dir = Path("bpe_tinystories")
 output_dir.mkdir(exist_ok=True)
-
-with open(output_dir / "vocab.json", "w") as f:
-    json.dump(vocab, f, indent=2)
-
-with open(output_dir / "merges.txt", "w") as f:
-    for merge in merges:
-        f.write(f"{merge[0]} {merge[1]}\n")
+tokenizer.save_model(str(output_dir))
 
 # Find the longest token in the vocabulary
+vocab = tokenizer.get_vocab()
 longest_token = max(vocab.keys(), key=len)
 
 # Print results

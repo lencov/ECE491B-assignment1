@@ -3,12 +3,22 @@ import collections
 from pathlib import Path
 import time
 import sys
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
-def batch_pre_tokenize(text, pattern, batch_size=10000):
+def findall_with_timeout(pattern, chunk, timeout=5):
+    """
+    Runs pattern.findall(chunk) in a separate thread and waits for up to 'timeout' seconds.
+    Raises TimeoutError if the call takes longer than timeout.
+    """
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(pattern.findall, chunk)
+        return future.result(timeout=timeout)
+
+def batch_pre_tokenize(text, pattern, batch_size=10000, timeout=5):
     """
     Pre-tokenize text in batches of 'batch_size' characters.
     Logs the batch start, end, and number of tokens for each batch.
-    If an error occurs, prints the batch start position, a sample of the chunk, and re-raises the error.
+    If an error (including a timeout) occurs, prints the batch start and a sample of the chunk, and re-raises the error.
     Returns a list of tokens.
     """
     tokens = []
@@ -18,10 +28,14 @@ def batch_pre_tokenize(text, pattern, batch_size=10000):
         chunk = text[start:end]
         print(f"Processing batch from {start} to {end} (size {end - start})")
         try:
-            chunk_tokens = pattern.findall(chunk)
+            chunk_tokens = findall_with_timeout(pattern, chunk, timeout=timeout)
+        except TimeoutError:
+            sample = chunk[:100]
+            print(f"Timeout processing chunk starting at {start} (batch size {batch_size}). Sample: {sample!r}", file=sys.stderr)
+            raise
         except Exception as e:
             sample = chunk[:100]
-            print(f"Error processing chunk starting at {start} (batch size {batch_size}). Sample of chunk: {sample!r}", file=sys.stderr)
+            print(f"Error processing chunk starting at {start} (batch size {batch_size}). Sample: {sample!r}\nError: {e}", file=sys.stderr)
             raise
         print(f"  Batch starting at {start} produced {len(chunk_tokens)} tokens")
         tokens.extend(chunk_tokens)
@@ -55,8 +69,8 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     # 2. Pre-tokenization using GPT-2 regex (compiled once)
     PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
     pattern = re.compile(PAT)
-    # Use batch pre-tokenization with a smaller batch size (e.g. 10,000 characters)
-    pre_tokens = batch_pre_tokenize(text, pattern, batch_size=10000)
+    # Use batch pre-tokenization with a smaller batch size and timeout
+    pre_tokens = batch_pre_tokenize(text, pattern, batch_size=10000, timeout=5)
     t_pre = time.perf_counter()
     print(f"Pre-tokenization took: {t_pre - t_read:.4f} seconds; found {len(pre_tokens)} tokens")
     
@@ -144,10 +158,3 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     print(f"Total training time: {total_time:.4f} seconds")
     
     return vocab, merges_list
-
-# Example usage:
-if __name__ == "__main__":
-    input_path = "path/to/your/text.txt"  # Adjust this path accordingly.
-    vocab_size = 500
-    special_tokens = ["<|endoftext|>"]
-    train_bpe(input_path, vocab_size, special_tokens)

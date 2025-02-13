@@ -3,43 +3,53 @@ import collections
 from pathlib import Path
 import time
 import sys
+import psutil
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 def findall_with_timeout(pattern, chunk, timeout=5):
     """
     Runs pattern.findall(chunk) in a separate thread and waits for up to 'timeout' seconds.
-    Raises TimeoutError if the call takes longer than timeout.
+    Returns None if the operation times out.
     """
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(pattern.findall, chunk)
-        return future.result(timeout=timeout)
+        try:
+            return future.result(timeout=timeout)
+        except TimeoutError:
+            return None  # Indicate failure
 
-def batch_pre_tokenize(text, pattern, batch_size=1000, timeout=5):
+def batch_pre_tokenize(text, pattern, batch_size=10000, timeout=5):
     """
     Pre-tokenize text in batches of 'batch_size' characters.
-    Logs the batch start, end, and number of tokens for each batch.
-    If an error (including a timeout) occurs, prints the batch start and a sample of the chunk, and re-raises the error.
+    Logs processing time, memory usage, and number of tokens per batch.
+    If a batch times out, logs the issue and skips it.
     Returns a list of tokens.
     """
     tokens = []
     text_len = len(text)
+    
     for start in range(0, text_len, batch_size):
         end = min(start + batch_size, text_len)
         chunk = text[start:end]
-        if start % 100000 == 0:
-            print(f"Processing batch from {start} to {end} (size {end - start})")
-        try:
-            chunk_tokens = findall_with_timeout(pattern, chunk, timeout=timeout)
-        except TimeoutError:
-            sample = chunk[:100]
-            print(f"Timeout processing chunk starting at {start} (batch size {batch_size}). Sample: {sample!r}", file=sys.stderr)
-            raise
-        except Exception as e:
-            sample = chunk[:100]
-            print(f"Error processing chunk starting at {start} (batch size {batch_size}). Sample: {sample!r}\nError: {e}", file=sys.stderr)
-            raise
-        print(f"  Batch starting at {start} produced {len(chunk_tokens)} tokens")
+        print(f"Processing batch from {start} to {end} (size {end - start})")
+
+        batch_start_time = time.perf_counter()
+        chunk_tokens = findall_with_timeout(pattern, chunk, timeout=timeout)
+        batch_end_time = time.perf_counter()
+        batch_time = batch_end_time - batch_start_time
+        
+        # Check if timeout occurred
+        if chunk_tokens is None:
+            print(f"⚠️ Timeout on batch starting at {start} (batch size {batch_size}). Skipping this chunk.")
+            continue  # Skip this batch
+
+        # Log memory usage
+        mem_usage = psutil.Process().memory_info().rss / (1024 ** 3)  # Convert bytes to GB
+        print(f"  Batch produced {len(chunk_tokens)} tokens in {batch_time:.2f}s. Memory usage: {mem_usage:.2f} GB")
+
+        # Extend token list
         tokens.extend(chunk_tokens)
+
     return tokens
 
 def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
@@ -70,7 +80,8 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     # 2. Pre-tokenization using GPT-2 regex (compiled once)
     PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
     pattern = re.compile(PAT)
-    # Use batch pre-tokenization with a smaller batch size and timeout
+    
+    # Use batch pre-tokenization with timeout handling
     pre_tokens = batch_pre_tokenize(text, pattern, batch_size=10000, timeout=5)
     t_pre = time.perf_counter()
     print(f"Pre-tokenization took: {t_pre - t_read:.4f} seconds; found {len(pre_tokens)} tokens")
@@ -159,3 +170,10 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]):
     print(f"Total training time: {total_time:.4f} seconds")
     
     return vocab, merges_list
+
+# Example usage:
+if __name__ == "__main__":
+    input_path = "path/to/your/text.txt"  # Adjust this path accordingly.
+    vocab_size = 500
+    special_tokens = ["<|endoftext|>"]
+    train_bpe(input_path, vocab_size, special_tokens)

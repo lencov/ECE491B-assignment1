@@ -29,7 +29,7 @@ def test_train_bpe():
     input_path = FIXTURES_PATH / "corpus.en"
     vocab, merges = run_train_bpe(
         input_path=input_path,
-        vocab_size=10000,
+        vocab_size=500,
         special_tokens=["<|endoftext|>"],
     )
 
@@ -48,11 +48,6 @@ def test_train_bpe():
             )
             for merge_token_1, merge_token_2 in gpt2_reference_merges
         ]
-    """
-    if merges != reference_merges:
-        print("Merges differ:")
-        print_merge_differences(merges, reference_merges
-    """
     assert merges == reference_merges
 
     # Compare the vocab to the expected output vocab

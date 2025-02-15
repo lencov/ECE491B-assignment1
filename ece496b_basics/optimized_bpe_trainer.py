@@ -1,3 +1,5 @@
+#attempt to optimize the BPE
+
 import regex as re
 import collections
 from pathlib import Path

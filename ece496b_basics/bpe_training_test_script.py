@@ -30,7 +30,7 @@ end_time = time.time()
 end_mem = get_memory_usage()
 
 # Save the tokenizer to disk
-output_dir = Path("bpe_tinystories")
+output_dir = Path("owt")
 output_dir.mkdir(exist_ok=True)
 tokenizer.save_model(str(output_dir))
 

@@ -9,7 +9,7 @@ def get_memory_usage():
     return process.memory_info().rss / (1024 ** 3)  # Convert to GB
 
 # Define input file and output paths
-input_path = "/content/ECE491B-assignment1/data/owt_train.txt.gz"  # Update this to the actual dataset path
+input_path = "/content/ECE491B-assignment1/data/owt_train.txt"  # Update this to the actual dataset path
 vocab_size = 32000
 special_tokens = ["<|endoftext|>"]
 

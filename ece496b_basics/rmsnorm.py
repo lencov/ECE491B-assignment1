@@ -19,8 +19,7 @@ class RMSNorm(nn.Module):
     def __init__(self, d_model: int, eps: float = 1e-5):
         super().__init__()
         self.eps = eps
-        # Learnable gain parameter initialized to ones.
-        self.gain = nn.Parameter(torch.ones(d_model))
+        self.weight = nn.Parameter(torch.ones(d_model))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Compute the RMS value across the last dimension.

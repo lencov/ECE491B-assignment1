@@ -89,7 +89,7 @@ def run_scaled_dot_product_attention(
         implementation with the provided key, query, and value tensors.
     """
     from ece496b_basics.transformer_utils import scaled_dot_product_attention
-    return scaled_dot_product_attention(K, Q, V, mask, pdrop)
+    return scaled_dot_product_attention(query=Q, key=K, value=V, mask=mask, dropout_p=pdrop)
 
 
 def run_multihead_self_attention(

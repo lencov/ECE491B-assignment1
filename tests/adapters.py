@@ -321,7 +321,6 @@ def run_transformer_lm(
     from ece496b_basics.transformer_lm import TransformerLM
     from ece496b_basics.transformer_utils import remap_transformer_lm_state_dict
 
-    # Instantiate the model.
     transformer_lm = TransformerLM(
         vocab_size=vocab_size,
         context_length=context_length,
@@ -333,15 +332,17 @@ def run_transformer_lm(
         residual_pdrop=residual_pdrop,
     )
 
-    # Remap the reference state dict keys to the names expected by our model.
-    d_k = d_model // num_heads  # Compute the per-head dimension
-    new_weights = remap_transformer_lm_state_dict(weights, num_heads, d_k)
+    # Remap full model weights
+    new_weights = remap_transformer_lm_state_dict(weights, num_layers, num_heads, d_model)
+
+    # Load weights and run forward pass
     transformer_lm.load_state_dict(new_weights)
     transformer_lm.eval()
 
     with torch.no_grad():
         logits = transformer_lm(in_indices)
     return logits
+
 
 
 

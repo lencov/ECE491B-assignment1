@@ -319,9 +319,29 @@ def run_transformer_lm(
         next-word distribution for each token.
     """
     from ece496b_basics.transformer_lm import TransformerLM
-    transformer_lm = TransformerLM(vocab_size, context_length, d_model, num_layers, num_heads, d_ff, attn_pdrop, residual_pdrop)
-    transformer_lm.load_state_dict(weights)
-    return transformer_lm(in_indices)
+    from ece496b_basics.transformer_utils import remap_transformer_lm_state_dict
+
+    # Instantiate the model.
+    transformer_lm = TransformerLM(
+        vocab_size=vocab_size,
+        context_length=context_length,
+        d_model=d_model,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        attn_pdrop=attn_pdrop,
+        residual_pdrop=residual_pdrop,
+    )
+
+    # Remap the reference state dict keys to the names expected by our model.
+    new_weights = remap_transformer_lm_state_dict(weights, num_layers, num_heads, d_model)
+    transformer_lm.load_state_dict(new_weights)
+    transformer_lm.eval()
+
+    with torch.no_grad():
+        logits = transformer_lm(in_indices)
+    return logits
+
 
 
 def run_rmsnorm(

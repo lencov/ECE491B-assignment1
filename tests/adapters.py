@@ -44,7 +44,7 @@ def run_positionwise_feedforward(
     # my_ffn.w1.weight.data = weights["w1.weight"]
     # my_ffn.w2.weight.data = weights["w2.weight"]
     from ece496b_basics.positionwise_feedforward import PositionwiseFeedForward
-    ffn = PositionwiseFeedForward(d_model)
+    ffn = PositionwiseFeedForward(d_model, d_ff)
     ffn.load_state_dict(weights)
     return ffn(in_features)
 

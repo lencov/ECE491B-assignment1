@@ -110,3 +110,43 @@ def remap_transformer_block_state_dict(state_dict: dict, num_heads: int, d_k: in
     # already match our naming in TransformerBlock if we use ln1, ffn, and ln2.
 
     return new_state_dict
+
+def remap_transformer_lm_state_dict(state_dict: dict, num_layers: int, num_heads: int, d_model: int) -> dict:
+    """
+    Remap keys for the full TransformerLM model.
+    
+    This function ensures that the state dict keys match the expected structure of TransformerLM.
+    """
+    new_state_dict = {}
+
+    # Remap embeddings
+    new_state_dict["token_embeddings.weight"] = state_dict["token_embeddings.weight"]
+    new_state_dict["position_embeddings.weight"] = state_dict["position_embeddings.weight"]
+    new_state_dict["ln_final.weight"] = state_dict["ln_final.weight"]
+    new_state_dict["lm_head.weight"] = state_dict["lm_head.weight"]
+
+    # Remap each Transformer block
+    d_k = d_model // num_heads
+    for layer_idx in range(num_layers):
+        prefix_old = f"layers.{layer_idx}."
+        prefix_new = f"layers.{layer_idx}."
+
+        # Remap attention projections
+        new_state_dict[f"{prefix_new}attn.q_heads"] = torch.stack(
+            torch.split(state_dict[f"{prefix_old}attn.q_proj.weight"], d_k, dim=0), dim=0
+        )
+        new_state_dict[f"{prefix_new}attn.k_heads"] = torch.stack(
+            torch.split(state_dict[f"{prefix_old}attn.k_proj.weight"], d_k, dim=0), dim=0
+        )
+        new_state_dict[f"{prefix_new}attn.v_heads"] = torch.stack(
+            torch.split(state_dict[f"{prefix_old}attn.v_proj.weight"], d_k, dim=0), dim=0
+        )
+        new_state_dict[f"{prefix_new}attn.output_proj"] = state_dict[f"{prefix_old}attn.output_proj.weight"]
+
+        # Copy layer norms and feed-forward weights
+        new_state_dict[f"{prefix_new}ln1.weight"] = state_dict[f"{prefix_old}ln1.weight"]
+        new_state_dict[f"{prefix_new}ffn.w1.weight"] = state_dict[f"{prefix_old}ffn.w1.weight"]
+        new_state_dict[f"{prefix_new}ffn.w2.weight"] = state_dict[f"{prefix_old}ffn.w2.weight"]
+        new_state_dict[f"{prefix_new}ln2.weight"] = state_dict[f"{prefix_old}ln2.weight"]
+
+    return new_state_dict

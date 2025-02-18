@@ -334,7 +334,8 @@ def run_transformer_lm(
     )
 
     # Remap the reference state dict keys to the names expected by our model.
-    new_weights = remap_transformer_block_state_dict(weights, num_layers, num_heads, d_model)
+    d_k = d_model // num_heads  # Compute the per-head dimension
+    new_weights = remap_transformer_block_state_dict(weights, num_heads, d_k)
     transformer_lm.load_state_dict(new_weights)
     transformer_lm.eval()
 

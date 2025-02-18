@@ -150,3 +150,22 @@ def remap_transformer_lm_state_dict(state_dict: dict, num_layers: int, num_heads
         new_state_dict[f"{prefix_new}ln2.weight"] = state_dict[f"{prefix_old}ln2.weight"]
 
     return new_state_dict
+
+def cross_entropy_loss(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the average cross-entropy loss given predicted logits and target indices.
+    
+    Args:
+        logits: Tensor of shape (..., vocab_size) containing the unnormalized logit scores.
+        targets: Tensor of shape (...) containing the target indices.
+        
+    Returns:
+        A scalar tensor representing the average cross-entropy loss over all tokens.
+    """
+    # For numerical stability, subtract the max logit from each vector.
+    logits_stable = logits - torch.logsumexp(logits, dim=-1, keepdim=True)
+    # Compute the negative log-likelihood for the correct class.
+    # targets.unsqueeze(-1) reshapes targets so that gather works along the vocab dimension.
+    loss = -logits_stable.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)
+    # Return the average loss over all batch (and any additional) dimensions.
+    return loss.mean()

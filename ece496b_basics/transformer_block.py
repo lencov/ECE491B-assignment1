@@ -24,22 +24,19 @@ class TransformerBlock(nn.Module):
     """
     def __init__(self, d_model: int, num_heads: int, d_ff: int, attn_pdrop: float, residual_pdrop: float):
         super().__init__()
-        # Sublayer 1: Multi-head self-attention
-        self.norm1 = RMSNorm(d_model)
-        self.mhsa = MultiHeadSelfAttention(d_model, num_heads, attn_pdrop)
+        self.ln1 = RMSNorm(d_model)
+        self.attn = MultiHeadSelfAttention(d_model, num_heads, attn_pdrop)
         self.dropout1 = nn.Dropout(residual_pdrop) if residual_pdrop > 0.0 else nn.Identity()
 
-        # Sublayer 2: Feed-forward network
-        self.norm2 = RMSNorm(d_model)
-        self.ff = PositionwiseFeedForward(d_model, d_ff)
+        self.ln2 = RMSNorm(d_model)
+        self.ffn = PositionwiseFeedForward(d_model, d_ff)
         self.dropout2 = nn.Dropout(residual_pdrop) if residual_pdrop > 0.0 else nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Sublayer 1: Multi-head self-attention with pre-norm and residual connection.
-        attn_out = self.mhsa(self.norm1(x))
+        # Sublayer 1: Apply pre-norm, multi-head self-attention, dropout, then add residual.
+        attn_out = self.attn(self.ln1(x))
         x = x + self.dropout1(attn_out)
-        
-        # Sublayer 2: Position-wise feed-forward network with pre-norm and residual connection.
-        ff_out = self.ff(self.norm2(x))
-        x = x + self.dropout2(ff_out)
+        # Sublayer 2: Apply pre-norm, feed-forward network, dropout, then add residual.
+        ffn_out = self.ffn(self.ln2(x))
+        x = x + self.dropout2(ffn_out)
         return x

@@ -43,7 +43,10 @@ def run_positionwise_feedforward(
     # You can also manually assign the weights
     # my_ffn.w1.weight.data = weights["w1.weight"]
     # my_ffn.w2.weight.data = weights["w2.weight"]
-    raise NotImplementedError
+    from ece496b_basics.positionwise_feedforward import PositionwiseFeedForward
+    ffn = PositionwiseFeedForward(d_model)
+    ffn.load_state_dict(weights)
+    return ffn(in_features)
 
 
 def run_scaled_dot_product_attention(

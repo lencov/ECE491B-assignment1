@@ -139,8 +139,8 @@ def run_multihead_self_attention(
         torch.FloatTensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    from ece496b_basics.multihead_self_attention import MultiheadSelfAttention
-    mhsa = MultiheadSelfAttention(d_model, num_heads, attn_pdrop)
+    from ece496b_basics.multihead_self_attention import MultiHeadSelfAttention
+    mhsa = MultiHeadSelfAttention(d_model, num_heads, attn_pdrop)
     mhsa.load_state_dict(weights)
     return mhsa(in_features)
 

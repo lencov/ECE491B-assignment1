@@ -319,7 +319,7 @@ def run_transformer_lm(
         next-word distribution for each token.
     """
     from ece496b_basics.transformer_lm import TransformerLM
-    from ece496b_basics.transformer_utils import remap_transformer_lm_state_dict
+    from ece496b_basics.transformer_utils import remap_transformer_block_state_dict
 
     # Instantiate the model.
     transformer_lm = TransformerLM(
@@ -334,7 +334,7 @@ def run_transformer_lm(
     )
 
     # Remap the reference state dict keys to the names expected by our model.
-    new_weights = remap_transformer_lm_state_dict(weights, num_layers, num_heads, d_model)
+    new_weights = remap_transformer_block_state_dict(weights, num_layers, num_heads, d_model)
     transformer_lm.load_state_dict(new_weights)
     transformer_lm.eval()
 

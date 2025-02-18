@@ -123,5 +123,9 @@ class MultiHeadSelfAttention(nn.Module):
         state_dict["q_heads"] = torch.stack(q_list, dim=0)
         state_dict["k_heads"] = torch.stack(k_list, dim=0)
         state_dict["v_heads"] = torch.stack(v_list, dim=0)
-        # Now the key "output_proj.weight" is expected to match our self.output_proj.
+        
+        # Rename output projection key if necessary.
+        if "output_proj.weight" in state_dict:
+            state_dict["output_proj"] = state_dict.pop("output_proj.weight")
+        
         return super().load_state_dict(state_dict, strict=strict)

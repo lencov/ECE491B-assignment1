@@ -66,3 +66,47 @@ def scaled_dot_product_attention(
     # Multiply the probabilities by the values.
     output = torch.matmul(attn_probs, value)
     return output
+
+
+def remap_transformer_block_state_dict(state_dict: dict, num_heads: int, d_k: int) -> dict:
+    """
+    Remap keys in the provided state dict to match the naming in our TransformerBlock.
+    
+    Expected reference keys (from the fixture):
+      - "attn.q_proj.weight", "attn.k_proj.weight", "attn.v_proj.weight",
+        "attn.output_proj.weight",
+      - "ln1.weight", "ffn.w1.weight", "ffn.w2.weight", "ln2.weight"
+      
+    We want to map them to our internal module names:
+      - attn.q_heads, attn.k_heads, attn.v_heads, attn.output_proj,
+      - ln1, ffn, ln2 remain the same.
+    
+    This function splits the concatenated projection weights into per-head weights.
+    """
+    new_state_dict = dict(state_dict)  # copy to avoid mutating input
+
+    # Remap the attention projections.
+    if "attn.q_proj.weight" in new_state_dict:
+        q_proj = new_state_dict.pop("attn.q_proj.weight")  # shape: (num_heads * d_k, d_model)
+        # Split q_proj into a tuple of tensors, each of shape (d_k, d_model)
+        q_heads = torch.stack(torch.split(q_proj, d_k, dim=0), dim=0)
+        new_state_dict["attn.q_heads"] = q_heads
+
+    if "attn.k_proj.weight" in new_state_dict:
+        k_proj = new_state_dict.pop("attn.k_proj.weight")
+        k_heads = torch.stack(torch.split(k_proj, d_k, dim=0), dim=0)
+        new_state_dict["attn.k_heads"] = k_heads
+
+    if "attn.v_proj.weight" in new_state_dict:
+        v_proj = new_state_dict.pop("attn.v_proj.weight")
+        v_heads = torch.stack(torch.split(v_proj, d_k, dim=0), dim=0)
+        new_state_dict["attn.v_heads"] = v_heads
+
+    if "attn.output_proj.weight" in new_state_dict:
+        # Simply rename key; our module expects "attn.output_proj"
+        new_state_dict["attn.output_proj"] = new_state_dict.pop("attn.output_proj.weight")
+
+    # The other keys (ln1.weight, ffn.w1.weight, ffn.w2.weight, ln2.weight)
+    # already match our naming in TransformerBlock if we use ln1, ffn, and ln2.
+
+    return new_state_dict

@@ -215,9 +215,17 @@ def run_transformer_block(
         running the Transformer block on the input features.
     """
     from ece496b_basics.transformer_block import TransformerBlock
+    from ece496b_basics.transformer_utils import remap_transformer_block_state_dict
     transformer_block = TransformerBlock(d_model, num_heads, d_ff, attn_pdrop, residual_pdrop)
-    transformer_block.load_state_dict(weights)
+    
+    # Compute d_k based on d_model and num_heads.
+    d_k = d_model // num_heads
+    # Remap the state dict.
+    new_weights = remap_transformer_block_state_dict(weights, num_heads, d_k)
+    
+    transformer_block.load_state_dict(new_weights)
     return transformer_block(in_features)
+
 
 
 def run_transformer_lm(

@@ -169,3 +169,29 @@ def cross_entropy_loss(logits: torch.Tensor, targets: torch.Tensor) -> torch.Ten
     loss = -logits_stable.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)
     # Return the average loss over all batch (and any additional) dimensions.
     return loss.mean()
+
+
+def get_lr_cosine_schedule(t: int, alpha_max: float, alpha_min: float, Tw: int, Tc: int) -> float:
+    """
+    Returns the learning rate at step t according to a cosine annealing schedule with warmup.
+
+    Args:
+        t (int): Current iteration.
+        alpha_max (float): Maximum (initial) learning rate.
+        alpha_min (float): Minimum (final) learning rate.
+        Tw (int): Number of warm-up iterations.
+        Tc (int): Total number of iterations for cosine annealing (after warm-up).
+
+    Returns:
+        float: The learning rate for iteration t.
+    """
+    if t < Tw:
+        # Warmup: linear increase from 0 to alpha_max.
+        return (t / Tw) * alpha_max
+    elif t <= Tc:
+        # Cosine annealing between Tw and Tc.
+        cosine_decay = 0.5 * (1 + math.cos(math.pi * (t - Tw) / (Tc - Tw)))
+        return alpha_min + cosine_decay * (alpha_max - alpha_min)
+    else:
+        # After Tc, the learning rate is fixed at alpha_min.
+        return alpha_min

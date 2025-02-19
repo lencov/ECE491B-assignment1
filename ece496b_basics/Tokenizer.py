@@ -2,8 +2,8 @@ import regex as re
 from typing import Dict, List, Tuple, Iterable, Iterator, Optional
 
 class Tokenizer:
-    # Base pattern from GPT‑2, which (by default) may add an optional leading space.
-    BASE_PATTERN = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+    # Default regex used for pre‐tokenization.
+    DEFAULT_PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
     def __init__(
         self,
@@ -12,96 +12,124 @@ class Tokenizer:
         special_tokens: Optional[List[str]] = None
     ):
         """
-        vocab: mapping from token ID (int) to token bytes.
-        merges: list of BPE merges (each a tuple of two bytes objects).
-        special_tokens: list of special tokens as strings.
+        Construct a tokenizer given a vocabulary, merges, and (optionally) special tokens.
         """
         self.vocab = vocab
         self.merges = merges
         self.special_tokens = special_tokens if special_tokens is not None else []
 
-        # Build a reverse mapping from token bytes to token ID.
+        # Build reverse mapping: token bytes -> token ID.
         self.token_to_id = {token: tid for tid, token in self.vocab.items()}
 
-        # Ensure that every special token is present in the vocabulary.
+        # Ensure all special tokens are in the vocabulary.
         for sp in self.special_tokens:
-            sp_bytes = sp.encode("utf-8")
+            sp_bytes = sp.encode('utf-8')
             if sp_bytes not in self.token_to_id:
                 new_id = len(self.vocab)
                 self.vocab[new_id] = sp_bytes
                 self.token_to_id[sp_bytes] = new_id
 
-        # If we have special tokens, build a pattern that captures them.
+        # Build a regex that first matches any special token (exactly) and then falls back to the default.
         if self.special_tokens:
-            # Sort special tokens by length (longest first) so that overlapping tokens work correctly.
-            special_pattern = "|".join(
-                map(re.escape, sorted(self.special_tokens, key=len, reverse=True))
-            )
-            # Use a capturing group for special tokens; then try the base pattern.
-            pattern = f"({special_pattern})|" + self.BASE_PATTERN
+            # Use non-capturing group so that re.findall returns the full match.
+            special_tokens_pattern = '|'.join(map(re.escape, self.special_tokens))
+            pattern = f"(?:{special_tokens_pattern})|{self.DEFAULT_PAT}"
         else:
-            pattern = self.BASE_PATTERN
+            pattern = self.DEFAULT_PAT
 
-        self.pattern = re.compile(pattern)
+        self.tokenizer_pattern = re.compile(pattern, re.UNICODE)
+
+    def _encode_token(self, token: str) -> List[int]:
+        """
+        Convert a single pre-token (string) into one or more token IDs.
+        """
+        if token in self.special_tokens:
+            return [self.token_to_id[token.encode('utf-8')]]
+        else:
+            pt_bytes = token.encode('utf-8')
+            token_seq = [bytes([b]) for b in pt_bytes]
+            for merge in self.merges:
+                token_seq = self._apply_merge(token_seq, merge)
+            return [self.token_to_id[t] for t in token_seq]
 
     def encode(self, text: str) -> List[int]:
         """
-        Encode an input string into a list of token IDs.
-        Special tokens that appear exactly in the text will be used as a whole.
-        Otherwise the text is encoded as UTF-8 bytes and merged via BPE.
+        Encode the entire input text (string) into a list of token IDs.
         """
         encoded_ids = []
-        for m in self.pattern.finditer(text):
-            # If group(1) is not None, then a special token was matched.
-            token = m.group(1) if m.group(1) is not None else m.group(0)
-            if token in self.special_tokens:
-                # Special token: convert to bytes and look up its ID.
-                sp_bytes = token.encode("utf-8")
-                encoded_ids.append(self.token_to_id[sp_bytes])
-            else:
-                # For a regular token, convert to bytes.
-                pt_bytes = token.encode("utf-8")
-                # Start with single-byte tokens.
-                token_seq = [bytes([b]) for b in pt_bytes]
-                # Apply each BPE merge in order.
-                for merge in self.merges:
-                    token_seq = self._apply_merge(token_seq, merge)
-                # Look up each resulting token in the vocabulary.
-                for t in token_seq:
-                    if t in self.token_to_id:
-                        encoded_ids.append(self.token_to_id[t])
-                    else:
-                        raise ValueError(f"Token {t} not found in vocabulary.")
+        # Get all pre-tokens using our custom regex.
+        pre_tokens = self.tokenizer_pattern.findall(text)
+        for token in pre_tokens:
+            encoded_ids.extend(self._encode_token(token))
         return encoded_ids
 
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
         """
-        Lazily encode an iterable of strings (e.g. lines from a file) into token IDs.
+        Lazily encode an iterable of strings into token IDs.
+        When the iterable is a file-like object (i.e. has .read()),
+        we read in fixed-size chunks and carefully handle tokens that
+        might be split across chunk boundaries.
         """
-        for text in iterable:
-            for tid in self.encode(text):
-                yield tid
+        # If iterable is a file-like object, do chunked processing.
+        if hasattr(iterable, "read"):
+            buffer = ""
+            chunk_size = 4096  # Adjust chunk size as needed.
+            while True:
+                chunk = iterable.read(chunk_size)
+                if not chunk:
+                    # End of file: process whatever is left.
+                    for tid in self.encode(buffer):
+                        yield tid
+                    break
+                buffer += chunk
+                # Process the buffer into tokens.
+                tokens, last_end = self._yield_tokens_from_buffer(buffer, final=False)
+                for token in tokens:
+                    for tid in self._encode_token(token):
+                        yield tid
+                # Leave the (possibly partial) last token in the buffer.
+                buffer = buffer[last_end:]
+        else:
+            # For other iterables assume each string is small enough.
+            for text in iterable:
+                for tid in self.encode(text):
+                    yield tid
+
+    def _yield_tokens_from_buffer(self, buffer: str, final: bool) -> Tuple[List[str], int]:
+        """
+        Tokenize the current buffer using our regex. If not in final mode,
+        and if the last match ends exactly at the end of the buffer, assume
+        it might be incomplete and leave it for the next chunk.
+        Returns a tuple (list_of_tokens, last_processed_index).
+        """
+        tokens = []
+        last_end = 0
+        for m in self.tokenizer_pattern.finditer(buffer):
+            # If we're not final and this match goes to the very end,
+            # then it might be incomplete—stop here.
+            if not final and m.end() == len(buffer):
+                break
+            tokens.append(m.group(0))
+            last_end = m.end()
+        return tokens, last_end
 
     def decode(self, ids: List[int]) -> str:
         """
         Decode a list of token IDs back into a string.
-        Concatenates the token bytes and decodes as UTF-8.
         """
         byte_seq = b"".join(self.vocab[tid] for tid in ids if tid in self.vocab)
-        return byte_seq.decode("utf-8", errors="replace")
+        return byte_seq.decode('utf-8', errors='replace')
 
     def _apply_merge(self, token_seq: List[bytes], merge: Tuple[bytes, bytes]) -> List[bytes]:
         """
         Apply a single BPE merge to a token sequence.
-        Scans for an adjacent pair that exactly matches the merge and replaces them
-        with their concatenation.
         """
         new_seq = []
         i = 0
         while i < len(token_seq):
             if i < len(token_seq) - 1 and (token_seq[i], token_seq[i+1]) == merge:
                 new_seq.append(token_seq[i] + token_seq[i+1])
-                i += 2  # Skip the next token since it was merged.
+                i += 2  # Skip the next token as it was merged.
             else:
                 new_seq.append(token_seq[i])
                 i += 1

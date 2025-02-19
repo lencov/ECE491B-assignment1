@@ -1,6 +1,7 @@
 import math
 import torch
 import torch.nn.functional as F
+from collections.abc import Iterable
 
 def softmax(x: torch.Tensor, dim: int) -> torch.Tensor:
     """
@@ -196,27 +197,25 @@ def get_lr_cosine_schedule(t: int, alpha_max: float, alpha_min: float, Tw: int, 
         # After Tc, the learning rate is fixed at alpha_min.
         return alpha_min
     
-def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float):
+def clip_gradients(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float) -> None:
     """
-    Given a set of parameters, clip their combined gradients to have an L2 norm
-    at most max_l2_norm. This function modifies the gradients in place.
+    Given a set of parameters, clip their combined gradients so that their total L2 norm
+    is at most max_l2_norm. The gradients are modified in-place.
 
     Args:
         parameters: Iterable of trainable parameters.
-        max_l2_norm: Maximum allowed L2 norm for the combined gradients.
+        max_l2_norm: A positive value specifying the maximum allowed L2 norm.
         
     Returns:
         None
     """
-    eps = 1e-6  # small constant for numerical stability
-    total_norm = 0.0
-    # Compute the squared L2 norm for all parameter gradients.
+    eps = 1e-6  # numerical stability
+    total_norm_sq = 0.0
     for p in parameters:
         if p.grad is not None:
-            total_norm += p.grad.data.pow(2).sum().item()
-    total_norm = total_norm ** 0.5
+            total_norm_sq += p.grad.data.pow(2).sum().item()
+    total_norm = total_norm_sq ** 0.5
 
-    # If the total norm exceeds the maximum allowed, scale all gradients down.
     if total_norm > max_l2_norm:
         scale = max_l2_norm / (total_norm + eps)
         for p in parameters:

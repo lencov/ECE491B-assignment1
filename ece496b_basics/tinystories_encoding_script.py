@@ -4,10 +4,10 @@ from huggingface_tokenizer import HuggingFaceTokenizer
 
 TINY_VOCAB = "/content/ECE491B-assignment1/bpe_tinystories/vocab.json"
 TINY_MERGES = "/content/ECE491B-assignment1/bpe_tinystories/merges.txt"
-TINY_TRAIN_PATH = "/content/ECE491B-assignment1/data/TinyStoriesV2-GPT4-train.txt"
+TINY_TRAIN_PATH = "/content/ECE491B-assignment1/data/TinyStoriesV2-GPT4-valid.txt"
 
 # Output prefix for the flushed parts.
-OUT_PREFIX = "/content/ECE491B-assignment1/serialized/tinystories_train"
+OUT_PREFIX = "/content/ECE491B-assignment1/serialized/tinystories_valid"
 
 # Special tokens (if any)
 SPECIAL_TOKENS = ["<|endoftext|>"]

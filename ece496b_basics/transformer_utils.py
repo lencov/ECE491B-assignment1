@@ -245,9 +245,9 @@ def get_batch(x: np.ndarray, batch_size: int, context_length: int, device: str):
       the input sequence is x[i : i+context_length] and the target is x[i+1 : i+1+context_length].
     """
     n = x.shape[0]
-    # The maximum valid starting index ensures we have context_length+1 tokens.
-    max_start = n - context_length - 1
-    # Randomly sample batch_size starting indices.
+    # Valid starting indices are 0 to n - context_length - 1 inclusive,
+    # so we set high = n - context_length to sample from [0, n - context_length)
+    max_start = n - context_length
     indices = np.random.randint(0, max_start, size=batch_size)
     
     # Build the input and target arrays.

@@ -221,3 +221,40 @@ def clip_gradients(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float)
         for p in parameters:
             if p.grad is not None:
                 p.grad.data.mul_(scale)
+
+
+def get_batch(x: np.ndarray, batch_size: int, context_length: int, device: str):
+    """
+    Samples a batch of training sequences from a concatenated sequence of token IDs.
+
+    Args:
+      x (np.ndarray): A 1D numpy array containing token IDs.
+      batch_size (int): Number of sequences in the batch.
+      context_length (int): Length of each input sequence (and corresponding target).
+      device (str): PyTorch device (e.g., 'cpu' or 'cuda:0').
+
+    Returns:
+      A tuple (inputs, targets) where:
+         - inputs is a torch.Tensor of shape (batch_size, context_length)
+         - targets is a torch.Tensor of shape (batch_size, context_length)
+      Both tensors are placed on the specified device.
+      
+    Note:
+      For each sampled starting index i (with 0 ≤ i ≤ n - context_length - 1),
+      the input sequence is x[i : i+context_length] and the target is x[i+1 : i+1+context_length].
+    """
+    n = x.shape[0]
+    # The maximum valid starting index ensures we have context_length+1 tokens.
+    max_start = n - context_length - 1
+    # Randomly sample batch_size starting indices.
+    indices = np.random.randint(0, max_start, size=batch_size)
+    
+    # Build the input and target arrays.
+    inputs = np.stack([x[i:i+context_length] for i in indices])
+    targets = np.stack([x[i+1:i+1+context_length] for i in indices])
+    
+    # Convert the arrays to PyTorch tensors and move them to the specified device.
+    inputs = torch.tensor(inputs, dtype=torch.long, device=device)
+    targets = torch.tensor(targets, dtype=torch.long, device=device)
+    
+    return inputs, targets

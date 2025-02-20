@@ -3,6 +3,7 @@ import torch
 import torch.nn.functional as F
 from collections.abc import Iterable
 import numpy as np
+from typing import Union, IO
 
 def softmax(x: torch.Tensor, dim: int) -> torch.Tensor:
     """
@@ -259,3 +260,42 @@ def get_batch(x: np.ndarray, batch_size: int, context_length: int, device: str):
     targets = torch.tensor(targets, dtype=torch.long, device=device)
     
     return inputs, targets
+
+def save_checkpoint(model: torch.nn.Module,
+                    optimizer: torch.optim.Optimizer,
+                    iteration: int,
+                    out: Union[str, bytes, IO[bytes]]) -> None:
+    """
+    Saves a checkpoint containing the model and optimizer states as well as the current iteration.
+
+    Args:
+        model: The model to save.
+        optimizer: The optimizer to save.
+        iteration: The current iteration number.
+        out: The destination path or file-like object to save the checkpoint.
+    """
+    checkpoint = {
+        "model_state": model.state_dict(),
+        "optimizer_state": optimizer.state_dict(),
+        "iteration": iteration,
+    }
+    torch.save(checkpoint, out)
+
+def load_checkpoint(src: Union[str, bytes, IO[bytes]],
+                    model: torch.nn.Module,
+                    optimizer: torch.optim.Optimizer) -> int:
+    """
+    Loads a checkpoint from the given source and restores the model and optimizer states.
+
+    Args:
+        src: The source path or file-like object to load the checkpoint.
+        model: The model to load the state into.
+        optimizer: The optimizer to load the state into.
+
+    Returns:
+        The iteration number saved in the checkpoint.
+    """
+    checkpoint = torch.load(src, map_location="cpu")
+    model.load_state_dict(checkpoint["model_state"])
+    optimizer.load_state_dict(checkpoint["optimizer_state"])
+    return checkpoint["iteration"]

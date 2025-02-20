@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 
-from ece496b_basics.rmsnorm import RMSNorm
-from ece496b_basics.multihead_self_attention import MultiHeadSelfAttention
-from ece496b_basics.positionwise_feedforward import PositionwiseFeedForward
+from rmsnorm import RMSNorm
+from multihead_self_attention import MultiHeadSelfAttention
+from positionwise_feedforward import PositionwiseFeedForward
 
 class TransformerBlock(nn.Module):
     """

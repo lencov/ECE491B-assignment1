@@ -4,10 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import your building blocks.
-from ece496b_basics.rmsnorm import RMSNorm
-from ece496b_basics.multihead_self_attention import MultiHeadSelfAttention
-from ece496b_basics.positionwise_feedforward import PositionwiseFeedForward
-from ece496b_basics.transformer_block import TransformerBlock  # assuming this file contains the TransformerBlock class
+from rmsnorm import RMSNorm
+from transformer_block import TransformerBlock  # assuming this file contains the TransformerBlock class
 
 class TransformerLM(nn.Module):
     """

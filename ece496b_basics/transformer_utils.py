@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn.functional as F
 from collections.abc import Iterable
+import numpy as np
 
 def softmax(x: torch.Tensor, dim: int) -> torch.Tensor:
     """

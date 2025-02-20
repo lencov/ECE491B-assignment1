@@ -3,8 +3,8 @@ import os
 import time
 import numpy as np
 import torch
-from ece496b_basics.transformer_lm import TransformerLM
-from ece496b_basics.transformer_utils import get_lr_cosine_schedule, clip_gradients, cross_entropy_loss, load_checkpoint, save_checkpoint, get_batch
+from transformer_lm import TransformerLM
+from transformer_utils import get_lr_cosine_schedule, clip_gradients, cross_entropy_loss, load_checkpoint, save_checkpoint, get_batch
 from AdamW import AdamW
 
 def main(args):

@@ -2,25 +2,24 @@ import os
 import numpy as np
 from huggingface_tokenizer import HuggingFaceTokenizer
 
-# === CONFIGURATION: Correct paths ===
-# For example, we'll process the TinyStories training set.
-TINY_VOCAB = "/content/ECE491B-assignment1/bpe_tinystories/vocab.json"
-TINY_MERGES = "/content/ECE491B-assignment1/bpe_tinystories/merges.txt"
-TINY_TRAIN_PATH = "/content/ECE491B-assignment1/data/TinyStoriesV2-GPT4-train.txt"
+# === CONFIGURATION: OpenWebText paths ===
+OWT_VOCAB = "/content/ECE491B-assignment1/owt/vocab.json"
+OWT_MERGES = "/content/ECE491B-assignment1/owt/merges.txt"
+OWT_TRAIN_PATH = "/content/ECE491B-assignment1/data/owt_train.txt"
 
 # Output prefix for the flushed parts.
-OUT_PREFIX = "/content/ECE491B-assignment1/serialized/tinystories_train"
+OUT_PREFIX = "/content/ECE491B-assignment1/serialized/openwebtext_train"
 
 # Special tokens (if any)
 SPECIAL_TOKENS = ["<|endoftext|>"]
 
-# Initialize the tokenizer
-tinystories_tokenizer = HuggingFaceTokenizer(TINY_VOCAB, TINY_MERGES, special_tokens=SPECIAL_TOKENS)
+# Initialize the OpenWebText tokenizer.
+openwebtext_tokenizer = HuggingFaceTokenizer(OWT_VOCAB, OWT_MERGES, special_tokens=SPECIAL_TOKENS)
 
 def encode_and_flush_dataset(tokenizer, file_path, out_file_prefix, chunk_size=4096, flush_threshold=10_000_000):
     """
-    Process a large file in chunks, tokenizing the text and flushing the token IDs to disk
-    whenever the in-memory list reaches flush_threshold tokens.
+    Process a large file in chunks, tokenizing the text and flushing the token IDs
+    to disk whenever the in-memory list reaches flush_threshold tokens.
     """
     token_ids = []
     leftover = ""
@@ -40,18 +39,17 @@ def encode_and_flush_dataset(tokenizer, file_path, out_file_prefix, chunk_size=4
             # To avoid cutting a token in half, find the last whitespace.
             split_idx = data.rfind(" ")
             if split_idx == -1:
-                # No whitespace found: process all.
+                # No whitespace found: process entire chunk.
                 split_idx = len(data)
                 leftover = ""
             else:
                 leftover = data[split_idx:]
                 data = data[:split_idx]
-
-            new_tokens = tokenizer.encode(data)
-            token_ids.extend(new_tokens)
+            
+            token_ids.extend(tokenizer.encode(data))
             print(f"Processed {total_bytes} bytes, total tokens so far: {len(token_ids)}", flush=True)
 
-            # Flush to disk if token_ids exceed threshold.
+            # Flush to disk if token_ids exceed the threshold.
             if len(token_ids) >= flush_threshold:
                 part_filename = f"{out_file_prefix}_part{part_number}.npy"
                 np.save(part_filename, np.array(token_ids, dtype=np.uint16))
@@ -59,7 +57,7 @@ def encode_and_flush_dataset(tokenizer, file_path, out_file_prefix, chunk_size=4
                 part_number += 1
                 token_ids = []  # Clear the list to free memory
 
-    # Process any leftover text.
+    # Process any remaining text.
     if leftover:
         token_ids.extend(tokenizer.encode(leftover))
     
@@ -71,5 +69,5 @@ def encode_and_flush_dataset(tokenizer, file_path, out_file_prefix, chunk_size=4
 
     print("Finished encoding and flushing dataset.")
 
-# Run the function on the TinyStories training file.
-encode_and_flush_dataset(tinystories_tokenizer, TINY_TRAIN_PATH, OUT_PREFIX)
+# Run the function on the OpenWebText training file.
+encode_and_flush_dataset(openwebtext_tokenizer, OWT_TRAIN_PATH, OUT_PREFIX)

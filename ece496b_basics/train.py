@@ -7,14 +7,29 @@ from transformer_lm import TransformerLM
 from transformer_utils import get_lr_cosine_schedule, clip_gradients, cross_entropy_loss, load_checkpoint, save_checkpoint, get_batch
 from AdamW import AdamW
 
+def safe_load_memmap(path):
+    """
+    Attempts to load a numpy array in memmap mode.
+    If the file header is inconsistent (e.g., "mmap length is greater than file size"),
+    it loads the file normally, re-saves it (thereby fixing the header), and then loads in memmap mode.
+    """
+    try:
+        return np.load(path, mmap_mode='r')
+    except ValueError as e:
+        print(f"Error loading memmap for {path}: {e}")
+        print("Loading full array and rewriting file header...")
+        data_full = np.load(path)
+        np.save(path, data_full)
+        return np.load(path, mmap_mode='r')
+
 def main(args):
     device = torch.device(args.device)
     
     # Load training and validation datasets in memory-mapped mode.
     print("Loading training data...")
-    train_data = np.load(args.train_data, mmap_mode='r')
+    train_data = safe_load_memmap(args.train_data)
     print("Loading validation data...")
-    val_data = np.load(args.val_data, mmap_mode='r')
+    val_data = safe_load_memmap(args.val_data)
     
     # Initialize model.
     model = TransformerLM(

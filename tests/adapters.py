@@ -539,7 +539,8 @@ def run_save_checkpoint(
         out: str | os.PathLike | BinaryIO | IO[bytes]
             Path or file-like object to serialize the model, optimizer, and iteration to.
     """
-    raise NotImplementedError
+    from ece496b_basics.transformer_utils import save_checkpoint
+    save_checkpoint(model, optimizer, iteration, out)
 
 
 def run_load_checkpoint(
@@ -563,7 +564,8 @@ def run_load_checkpoint(
     Returns:
         int, the previously-serialized number of iterations.
     """
-    raise NotImplementedError
+    from ece496b_basics.transformer_utils import load_checkpoint
+    return load_checkpoint(src, model, optimizer)
 
 
 def get_tokenizer(
